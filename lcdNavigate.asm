@@ -91,8 +91,8 @@ reti
 
 ;############################# Reset #####################################
 RESET:
-; car starts at position 0
-ldi xPos, 0
+; car starts at position 8, starts in center
+ldi xPos, 8
 
 ;stack pointer
 ldi temp, low(RAMEND)
@@ -216,7 +216,6 @@ main:
 	rcall lcd_update
 	rcall keyboard_read
 	
-	
 	CPI digit, 0x02 // up
 	BREQ faster
 	CPI digit, 0x04 // left
@@ -229,7 +228,14 @@ main:
 
 rjmp main
 
-
+/* // Check code with this deleted
+checkRightLimit:
+  ; check that it doesnt go past right
+  cpi xPos, 16
+  rcall lcd_update
+  ;other wise return
+  ret
+*/
 faster:
 	CPI desired_speed, 0x00
 	BREQ right // stops
@@ -244,22 +250,18 @@ too_fast:
 	rjmp main
 
 left:
-	/*CPI desired_speed, 0x00
-	BREQ right // stop
-	subi desired_speed, 0x05
-	CPI desired_speed, 0x14
-	BRLO too_slow*/
-	dec xPos
+	dec xPos // can't go less than 9
 	rjmp main
 
 too_slow:
 	ldi desired_speed, 0x14
 	rjmp main
 
-right: // move across, so add a space
-	// have a counter for x and y co ordinate
+right: ; move across, so add a space
+	; have a counter for x and y co ordinate
 	ldi desired_speed, 0x00
-	inc xPos // increase current xPos by 1, have a loop to loop over this and right sufficient spaces
+	inc xPos ; increase current xPos by 1, have a loop to loop over this and right sufficient spaces
+	; can't go bigger than 16
 	rjmp main
 
 start:
@@ -445,64 +447,38 @@ lcd_update:
 rcall lcd_wait_busy
 ldi data, 0x01
 rcall lcd_write_com
-// use temp to keep track
 clr temp
-spaceLoop:
+spaceLoop: ; wont it let go off the screen
+; check that xPos >= 8 and xPos <= 16
+cpi xPos, 8
+brlt leftLimit ; write to pos 8
+cpi xPos, 16
+brge rightLimit ; write to pos 15
+
 cp temp, xPos
 brne write_space
 cp temp, xPos
 breq write_Car
 
 write_Car:
-ldi data, 'C' // the current car
+ldi data, 'C' ; the current car
 rcall lcd_wait_busy
 rcall lcd_write_data
-/*
-ldi data, 0x63
-rcall lcd_wait_busy
-rcall lcd_write_data
-
-ldi data, 0x74
-rcall lcd_wait_busy
-rcall lcd_write_data
-
-ldi data, 0x3A
-rcall lcd_wait_busy
-rcall lcd_write_data
-
-mov data, actual_speed
-rcall write_number
-
-rcall lcd_wait_busy
-ldi data, 0xC0
-rcall lcd_write_com
-
-ldi data, 0x44
-rcall lcd_wait_busy
-rcall lcd_write_data
-
-ldi data, 0x65
-rcall lcd_wait_busy
-rcall lcd_write_data
-
-ldi data, 0x73
-rcall lcd_wait_busy
-rcall lcd_write_data
-
-ldi data, 0x3A
-rcall lcd_wait_busy
-rcall lcd_write_data
-
-mov data, desired_speed
-rcall write_number
-*/ret
+ret
 
 write_space:
-ldi data, ' ' // the current car
+ldi data, ' ' 
 rcall lcd_wait_busy
 rcall lcd_write_data
 inc temp
 jmp spaceLoop
+
+leftLimit:
+ldi xPos, 8
+rjmp spaceLoop
+rightLimit:
+ldi xPos, 15
+rjmp spaceLoop
 ;############################# writes data to LCD as number #####################################
 write_number:
 mov temp, data
