@@ -24,6 +24,7 @@
 .def xPos = r26 // x coordinate of car
 .def actual_speed = r27
 .def desired_speed = r28 // wont need later on
+.def yPos = r29
 
 .equ PORTDDIR = 0xF0
 .equ INITCOLMASK = 0xEF
@@ -93,6 +94,7 @@ reti
 RESET:
 ; car starts at position 8, starts in center
 ldi xPos, 8
+ldi yPos, 0 ; car starts at first column
 
 ;stack pointer
 ldi temp, low(RAMEND)
@@ -217,44 +219,27 @@ main:
 	rcall keyboard_read
 	
 	CPI digit, 0x02 // up
-	BREQ faster
+	BREQ up
 	CPI digit, 0x04 // left
 	BREQ left
 	CPI digit, 0x06 // right
 	BREQ right
 	CPI digit, 0x08 // down
-	BREQ start
+	BREQ down
 	
 
 rjmp main
 
-/* // Check code with this deleted
-checkRightLimit:
-  ; check that it doesnt go past right
-  cpi xPos, 16
-  rcall lcd_update
-  ;other wise return
-  ret
-*/
-faster:
-	CPI desired_speed, 0x00
-	BREQ right // stops
-	ldi temp, 0x05
-	add desired_speed, temp
-	CPI desired_speed, 0x50
-	BRGE too_fast
-	rjmp main
-
-too_fast:
-	ldi desired_speed, 0x50
-	rjmp main
+; shift position up
+up:
+dec yPos
+rjmp main
+down:
+inc yPos
+jmp main
 
 left:
 	dec xPos // can't go less than 9
-	rjmp main
-
-too_slow:
-	ldi desired_speed, 0x14
 	rjmp main
 
 right: ; move across, so add a space
@@ -448,17 +433,47 @@ rcall lcd_wait_busy
 ldi data, 0x01
 rcall lcd_write_com
 clr temp
+; don't let it go too high or too low
+cpi yPos, 1 ; write to second line
+breq secondLine
+; check that it isnt greater than 1
+cpi yPos, 2
+brge bottomLimit
+cpi yPos, 0 ; write to firstLine
+breq firstLine
+cpi yPos, 0
+brlt topLimit
+
 spaceLoop: ; wont it let go off the screen
 ; check that xPos >= 8 and xPos <= 16
 cpi xPos, 8
 brlt leftLimit ; write to pos 8
 cpi xPos, 16
 brge rightLimit ; write to pos 15
-
 cp temp, xPos
 brne write_space
 cp temp, xPos
 breq write_Car
+
+topLimit: ; hit top limit (ie. car is already on highest pos.)
+ldi yPos, 0
+jmp main
+
+firstLine: ; start writing to first line
+rcall lcd_wait_busy
+ldi data, 0x01
+rcall lcd_write_com
+jmp spaceLoop
+
+bottomLimit: ; hit right limit (ie. car is already on lowest pos.)
+ldi yPos, 1
+jmp main
+
+secondLine: ; start writing to second line
+rcall lcd_wait_busy
+ldi data, 0xC0
+rcall lcd_write_com
+jmp spaceLoop
 
 write_Car:
 ldi data, 'C' ; the current car
@@ -473,10 +488,11 @@ rcall lcd_write_data
 inc temp
 jmp spaceLoop
 
-leftLimit:
+leftLimit: ; hit left limit (ie. car is too far left)
 ldi xPos, 8
 rjmp spaceLoop
-rightLimit:
+
+rightLimit: ; hit right limit (ie. car is too far right)
 ldi xPos, 15
 rjmp spaceLoop
 ;############################# writes data to LCD as number #####################################
