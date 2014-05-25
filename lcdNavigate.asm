@@ -429,11 +429,16 @@ ret
 ;############################# updates LCD display #####################################
 lcd_update:
 
-rcall lcd_wait_busy
-ldi data, 0x01
-rcall lcd_write_com
+;rcall lcd_wait_busy
+;ldi data, 0x01
+;rcall lcd_write_com
 clr temp
 ; don't let it go too high or too low
+; write data first, ie lives and car remaining
+ldi temp, 0
+cpi temp, 0
+breq write_game_data
+/*
 cpi yPos, 1 ; write to second line
 breq secondLine
 ; check that it isnt greater than 1
@@ -443,21 +448,115 @@ cpi yPos, 0 ; write to firstLine
 breq firstLine
 cpi yPos, 0
 brlt topLimit
+*/
+write_game_data: ; should always write to first line
+rcall lcd_wait_busy
+ldi data, 0x01
+rcall lcd_write_com
+ldi data, 'L' // lives remaining
+rcall lcd_wait_busy
+rcall lcd_write_data
+inc temp
+ldi data, ':'
+rcall lcd_wait_busy
+rcall lcd_write_data
+inc temp
+ldi data, '7' // arbitary number, need to change this
+rcall lcd_wait_busy
+rcall lcd_write_data
+inc temp
+ldi data, ' ' // space
+rcall lcd_wait_busy
+rcall lcd_write_data
+inc temp
+ldi data, 'C' // cars remaining
+rcall lcd_wait_busy
+rcall lcd_write_data
+inc temp
+ldi data, ':'
+rcall lcd_wait_busy
+rcall lcd_write_data
+inc temp
+ldi data, '5' // arbitary number, need to change this
+rcall lcd_wait_busy
+rcall lcd_write_data
+inc temp
+ldi data, '|' // divider
+rcall lcd_wait_busy
+rcall lcd_write_data
+inc temp
+cpi yPos, 0 ; if 0 then car goes on this line
+breq write_car_top
+cpi yPos, 0
+brlt topLimit
+jmp write_game_data_bot_row
 
-spaceLoop: ; wont it let go off the screen
-; check that xPos >= 8 and xPos <= 16
-cpi xPos, 8
-brlt leftLimit ; write to pos 8
-cpi xPos, 16
-brge rightLimit ; write to pos 15
-cp temp, xPos
-brne write_space
-cp temp, xPos
-breq write_Car
+// writing to the second line
+write_game_data_bot_row:
+rcall lcd_wait_busy
+ldi data, 0xC0
+rcall lcd_write_com
+
+ldi data, 'S' // current score
+rcall lcd_wait_busy
+rcall lcd_write_data
+
+ldi data, ':'
+rcall lcd_wait_busy
+rcall lcd_write_data
+
+ldi data, ' '
+rcall lcd_wait_busy
+rcall lcd_write_data
+
+ldi data, ' '
+rcall lcd_wait_busy
+rcall lcd_write_data
+
+ldi desired_speed, 99
+mov data, desired_speed
+rcall write_number
+
+ldi data, '|'
+rcall lcd_wait_busy
+rcall lcd_write_data
+
+ldi temp, 8
+;cpi yPos, 1 ; write to second line
+;breq secondLine
+;brlt topLimit
+cpi yPos, 1
+;breq secondLine
+breq write_car_bot
+cpi yPos, 2
+brge bottomLimit
+;rjmp spaceLoop
+;ldi temp, 8
+ret
 
 topLimit: ; hit top limit (ie. car is already on highest pos.)
 ldi yPos, 0
 jmp main
+
+write_car_bot:
+rcall spaceLoop
+ret
+
+
+
+write_car_top:
+rcall spaceLoop
+;ldi data, 'C' ; the current car
+;rcall lcd_wait_busy
+;rcall lcd_write_data
+jmp write_game_data_bot_row
+
+secondLine: ; start writing to second line
+rcall lcd_wait_busy
+ldi data, 0xC0
+rcall lcd_write_com
+; reset temp
+jmp spaceLoop
 
 firstLine: ; start writing to first line
 rcall lcd_wait_busy
@@ -469,11 +568,18 @@ bottomLimit: ; hit right limit (ie. car is already on lowest pos.)
 ldi yPos, 1
 jmp main
 
-secondLine: ; start writing to second line
-rcall lcd_wait_busy
-ldi data, 0xC0
-rcall lcd_write_com
-jmp spaceLoop
+spaceLoop: ; wont it let go off the screen
+; check that xPos >= 8 and xPos <= 16
+// inc temp by 7, and write data, for lives etc
+cpi xPos, 8
+brlt leftLimit ; write to pos 8
+cpi xPos, 16
+brge rightLimit ; write to pos 15
+cp temp, xPos
+brne write_space
+cp temp, xPos
+breq write_Car
+ret
 
 write_Car:
 ldi data, 'C' ; the current car
@@ -495,6 +601,8 @@ rjmp spaceLoop
 rightLimit: ; hit right limit (ie. car is too far right)
 ldi xPos, 15
 rjmp spaceLoop
+
+
 ;############################# writes data to LCD as number #####################################
 write_number:
 mov temp, data
