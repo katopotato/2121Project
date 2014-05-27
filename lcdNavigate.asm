@@ -438,17 +438,7 @@ clr temp
 ldi temp, 0
 cpi temp, 0
 breq write_game_data
-/*
-cpi yPos, 1 ; write to second line
-breq secondLine
-; check that it isnt greater than 1
-cpi yPos, 2
-brge bottomLimit
-cpi yPos, 0 ; write to firstLine
-breq firstLine
-cpi yPos, 0
-brlt topLimit
-*/
+
 write_game_data: ; should always write to first line
 rcall lcd_wait_busy
 ldi data, 0x01
@@ -522,16 +512,11 @@ rcall lcd_wait_busy
 rcall lcd_write_data
 
 ldi temp, 8
-;cpi yPos, 1 ; write to second line
-;breq secondLine
-;brlt topLimit
 cpi yPos, 1
-;breq secondLine
+
 breq write_car_bot
 cpi yPos, 2
 brge bottomLimit
-;rjmp spaceLoop
-;ldi temp, 8
 ret
 
 topLimit: ; hit top limit (ie. car is already on highest pos.)
@@ -546,16 +531,12 @@ ret
 
 write_car_top:
 rcall spaceLoop
-;ldi data, 'C' ; the current car
-;rcall lcd_wait_busy
-;rcall lcd_write_data
 jmp write_game_data_bot_row
 
 secondLine: ; start writing to second line
 rcall lcd_wait_busy
 ldi data, 0xC0
 rcall lcd_write_com
-; reset temp
 jmp spaceLoop
 
 firstLine: ; start writing to first line
