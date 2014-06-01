@@ -19,7 +19,8 @@
 .def data = r22
 .def temp3 = r23
 ;================================
-.def decoder_count = r25 // wont need later on
+//.def decoder_count = r25 // wont need later on
+.def distToO = r25 ; dist between car and obstacle, int is 6
 .def flags = r24
 .def xPos = r26 // x coordinate of car
 .def actual_speed = r27
@@ -86,17 +87,19 @@ jmp default
 jmp default
 jmp default
 
+
 ;############################# Default interrupt #####################################
 default:
 reti
+
 
 ;############################# Reset #####################################
 RESET:
 ; car starts at position 8, starts in center
 ldi xPos, 8
 ldi yPos, 0 ; car starts at first column
-
-;stack pointer
+ldi distToO, 6 ; init dist to O
+;stack pointer (initialises the stack?)
 ldi temp, low(RAMEND)
 out SPL, temp
 ldi temp, high(RAMEND)
@@ -104,7 +107,7 @@ out SPH, temp
 
 
 ;set up starting values for registers
-ldi decoder_count, 0x00
+//ldi decoder_count, 0x00
 ldi desired_speed, 0x14
 
 ;Outputs for keyboard
@@ -226,10 +229,20 @@ main:
 	BREQ right
 	CPI digit, 0x08 // down
 	BREQ down
-	
+	cpi digit, 0x00
+	breq stop	
 
 rjmp main
 
+stop:
+	ldi desired_speed, 0x00
+	ldi temp, 0x00
+	mov temp, desired_speed
+	sub temp, actual_speed
+	in temp2, OCR0
+	add temp2, temp
+	out OCR0, temp2
+	rjmp main
 ; shift position up
 up:
 dec yPos
@@ -247,6 +260,7 @@ right: ; move across, so add a space
 	ldi desired_speed, 0x00
 	inc xPos ; increase current xPos by 1, have a loop to loop over this and right sufficient spaces
 	; can't go bigger than 16
+	dec distToO // dist to obstacle decreases
 	rjmp main
 
 start:
@@ -428,10 +442,6 @@ ret
 
 ;############################# updates LCD display #####################################
 lcd_update:
-
-;rcall lcd_wait_busy
-;ldi data, 0x01
-;rcall lcd_write_com
 clr temp
 ; don't let it go too high or too low
 ; write data first, ie lives and car remaining
@@ -446,39 +456,46 @@ rcall lcd_write_com
 ldi data, 'L' // lives remaining
 rcall lcd_wait_busy
 rcall lcd_write_data
-inc temp
+
 ldi data, ':'
 rcall lcd_wait_busy
 rcall lcd_write_data
-inc temp
+
 ldi data, '7' // arbitary number, need to change this
 rcall lcd_wait_busy
 rcall lcd_write_data
-inc temp
+
 ldi data, ' ' // space
 rcall lcd_wait_busy
 rcall lcd_write_data
-inc temp
+
 ldi data, 'C' // cars remaining
 rcall lcd_wait_busy
 rcall lcd_write_data
-inc temp
+
 ldi data, ':'
 rcall lcd_wait_busy
 rcall lcd_write_data
-inc temp
-ldi data, '5' // arbitary number, need to change this
+
+ldi temp, 48
+add temp, distToO
+
+mov data, temp
+//ldi data, temp // arbitary number, need to change this
 rcall lcd_wait_busy
 rcall lcd_write_data
-inc temp
+
 ldi data, '|' // divider
 rcall lcd_wait_busy
 rcall lcd_write_data
-inc temp
+
 cpi yPos, 0 ; if 0 then car goes on this line
 breq write_car_top
 cpi yPos, 0
 brlt topLimit
+; write obstacle here, go here car will be in bottom row
+mov temp, distToO
+jmp write_space_obstacle
 jmp write_game_data_bot_row
 
 // writing to the second line
@@ -527,11 +544,49 @@ write_car_bot:
 rcall spaceLoop
 ret
 
-
-
 write_car_top:
+ldi temp, 8
 rcall spaceLoop
+// write obstacle to end 
+// write 6 spaces, then obstacle
+mov temp, distToO // copy dist into temp, so we can keep original val.
+cpi distToO, -1
+brge write_space_obstacle ; space routine for obstacle
+	ldi data, 'A'
+	rcall lcd_wait_busy
+	rcall lcd_write_data
+
+//rcall write_obstacle
 jmp write_game_data_bot_row
+
+write_A:
+	ldi data, 'A'
+	rcall lcd_wait_busy
+	rcall lcd_write_data
+	jmp write_game_data_bot_row
+write_space_obstacle:
+//cpi temp, 1 // Co, no need to write A
+//breq car_crash
+cpi temp, 0
+brlt write_obstacle
+ldi data, ' ' 
+rcall lcd_wait_busy
+rcall lcd_write_data
+dec temp
+//cpi temp, 0 // on the car
+//breq write_obstacle
+cpi temp, 1
+brge write_space_obstacle
+rcall write_obstacle
+// falls through here, can write obstacle
+//ret
+jmp write_game_data_bot_row
+
+; if dist = 1 we crash TESTCASE: turn the light on
+car_crash:
+;clr temp
+
+ret 
 
 secondLine: ; start writing to second line
 rcall lcd_wait_busy
@@ -551,7 +606,6 @@ jmp main
 
 spaceLoop: ; wont it let go off the screen
 ; check that xPos >= 8 and xPos <= 16
-// inc temp by 7, and write data, for lives etc
 cpi xPos, 8
 brlt leftLimit ; write to pos 8
 cpi xPos, 16
@@ -583,6 +637,11 @@ rightLimit: ; hit right limit (ie. car is too far right)
 ldi xPos, 15
 rjmp spaceLoop
 
+write_obstacle:
+ldi data, 'o'
+rcall lcd_wait_busy
+rcall lcd_write_data
+ret
 
 ;############################# writes data to LCD as number #####################################
 write_number:
