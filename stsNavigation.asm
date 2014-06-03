@@ -1,11 +1,10 @@
-/*
-            connections:
-		    PB0-PB3     -> LED0 - LED3
-		    PB4         -> Mot    
-		    Ain(Audio)  -> OpD
-		    ASD         -> Speaker (PIN 1)
-		    PB0(Switch) -> OpE   
-			*/
+/** connections:
+ * PB0-PB3     -> LED0 - LED3
+ * PB4         -> Mot    
+ * Ain(Audio)  -> OpD
+ * ASD         -> Speaker (PIN 1)
+ * PB0(Switch) -> OpE   
+ */
 .include "m64def.inc"
 
 .def temp=r16
@@ -15,11 +14,10 @@
 .def xPos = r20
 .def yPos = r21
 .def data = r22
-
 .def row =r23
 .def col =r24
 .def mask =r25
-;.def digit = r26 // used to time each game for 30 sec
+.def currentLocation = r28
 
 .equ PORTDDIR = 0xF0
 .equ INITCOLMASK = 0xEF
@@ -74,8 +72,15 @@ ldi counter3,0
 ldi temp,255
 out DDRB,temp
 
-ldi xPos, 16 ; begins far right
+; set up keyboard
+;Outputs for keyboard
+ldi temp, PORTDDIR ; columns are outputs, rows are inputs
+out DDRC, temp
+
+
+ldi xPos, 0 ; begins far right
 ldi yPos, 0	; begins top
+;ldi currentLocation, 0x000116 ; currentLocation of x
 ;set up output LCD
 ser temp
 out DDRD, temp
@@ -85,16 +90,16 @@ rcall init_lcd
 
 ; initialise values to store
 ldi temp, 'L'; represents nothing
-sts 0x000100,temp
+sts 0x000132,temp
 
 ldi temp, ':' 
-sts 0x000101,r16
+sts 0x000133,r16
 
 ldi temp, '2' 
-sts 0x000102,r16
+sts 0x000134,r16
 
 ldi temp, ' ' 
-sts 0x000103,r16
+sts 0x000135,r16
 
 ldi temp, 'C' 
 sts 0x000104,r16
@@ -109,7 +114,7 @@ ldi temp, '|'
 sts 0x000107,r16
 
 ;game play area of level 1 (this is what should be shifted across)
-ldi temp, ' '; represents nothing
+ldi temp, 'C'; represents nothing, initial position of car
 sts 0x000116,temp
 
 ldi temp, ' ' 
@@ -198,6 +203,20 @@ rjmp main
 
 .endmacro
 
+/* Shifts cell across, @0 - left address, @1 - right address
+	move @1 into @0
+*/
+.macro shift
+; check that contents of @0 is not C
+		lds r24, @0
+		cpi r24, 'C'
+		brne shift_position
+
+shift_position:
+		lds r24, @1
+		sts @0, r24
+		ret	
+.endmacro
 ;############################## initialize the LCD #######################################
 init_lcd:
 
@@ -239,8 +258,6 @@ ret
 
 
 Timer0:                  ; Prologue starts.
-;push r29                 ; Save all conflict registers in the prologue.
-;push r28
 in r24, SREG ; any overflow/ flags that are already on
 push r24                 ; Prologue ends.
 
@@ -259,20 +276,21 @@ inc counter   ; if it is not a second, increment the counter
 
 rjmp exit
 
-secondloop: inc counter3 ; counting 100 for every 35 times := 35*100 := 3500
-            cpi counter3,100 
-            brne exit
-	    inc temp3
-	    ldi counter3,0  
+secondloop: 
+	inc counter3 ; counting 100 for every 35 times := 35*100 := 3500
+    cpi counter3,100 
+    brne exit
+	inc temp3
+	ldi counter3,0  
 ; does this every second
 ; change this every second
 ; shift everything down by one position
+
 exit: 
-pop r24                  ; Epilogue starts;
-out SREG, r24            ; Restore all conflict registers from the stack.
-;pop r28
-;pop r29
-reti  
+	pop r24                  ; Epilogue starts;
+	out SREG, r24            ; Restore all conflict registers from the stack.
+	reti  
+
 outmot: 
 		; write to first line
 		rcall lcd_wait_busy
@@ -282,8 +300,8 @@ outmot:
 		ldi counter,0    ; clearing the counter values after counting 3597 interrupts which gives us one second
         ldi temp3,0
         ldi counter3,0
-		dec xPos
-
+		;dec xPos
+		rcall keyboard_read ; number will be stored in temp
 		rcall lcd_update
 ;RCALL WRITE SCORE TOP
 ;WRITE GAME TOP
@@ -292,9 +310,15 @@ outmot:
 ; WRITE GAME BOT
 
 ;SHIFT EVERYTHING BY ONE
-; ### shift top row ###
-		lds r24, 0x000117
-		sts 0x000116, r24 ; move the data across one
+; ### shift top row ### there always has to be a c appearing
+; check for car, before moving data across
+; check that current square does not contain car
+lds r24, 0x000116 ; ######## check that it isn't car
+cpi r24, 'C' ; only move across if not equal
+brne move_across1
+;shift 0x000116, 0x000117  /** shift macro takes in address to shift*/
+;		lds r24, 0x000117
+;		sts 0x000116, r24 ; move the data across one
 
 		lds r24, 0x000118
 		sts 0x000117, r24
@@ -307,6 +331,10 @@ outmot:
 		breq remove_power_up_top
 		jmp second_half_top
 
+move_across1:
+		lds r24, 0x000117
+		sts 0x000116, r24 ; move the data across one
+		ret
 second_half_top:
 		sts 0x000119, r24
 		lds r24, 0x000121
@@ -361,15 +389,6 @@ second_half_bot:
 		
 		; have to check the values of both temp, and temp 3?
 		rjmp exit        ; go to exit
-// at the end of the 30 sec interval
-/*
-turnOff:
-	; clear lcd
-	rcall lcd_wait_busy
-	ldi data, 0x01 // 00000001 clear
-	rcall lcd_write_com
-	jmp loop
-*/
 remove_power_up_bot:
 	ldi r24, ' '
 	rjmp second_half_bot
@@ -434,8 +453,14 @@ ldi temp, 1<<TOIE0       ; =278 microseconds
 out TIMSK, temp          ; T/C0 interrupt enable
 sei                      ; Enable global interrupt
 ;### Read the keyboard ###
+;rcall keyboard_read ; number will be stored in temp
+;cpi r27, 0
+;breq clear_display ;#### clear the display as a test
 ;initially obstacle is on the far right
 
+; press the number zero
+;cpi r27, 0
+;breq clear_display
 ; storing the data
 ldi temp, 49
 ; check what y pointer is being used for
@@ -472,8 +497,8 @@ ldi mask, INITROWMASK ; initialise row check
 clr row ; initial row
 
 rowloop:
-mov temp3, temp
-and temp3, mask ; check masked bit
+mov r27, temp
+and r27, mask ; check masked bit
 brne skipconv ; if the result is non-zero,
 ; we need to look again
 rcall convert ; if bit is clear, convert the bitcode
@@ -548,12 +573,83 @@ zero:
 clr temp ; set to zero
 
 convert_end:
-//mov digit, temp ; write value to digit
+;clr r27
+; write the value to lives:
 
+mov r27, temp
+sts 0x000134, r27
+cpi r27, 6 ; move right
+breq right
+/* #############################################  TO DO , IMPLEMENT THIS
+
+cpi r27, 4 ; move left
+breq left
+cpi r27, 2 ; move up
+breq up
+cpi r27, 4 ; move down
+breq down
+cpi r27, star
+breq skip_level
+cpi r27, hash
+breq restart_game
+else do not move c, car only moves with key press
+*/
 SET
 BLD temp, 0
 
 ret ; return to caller
+;ret
+
+; shifts across to the right
+right: 
+	; find c
+	ldi temp, 'P'
+	sts 0x000127, temp
+	ldi temp, 'X'
+	sts 0x000128, temp
+	;lds r24, 0x000126
+	;cpi r24, 'C'
+	;breq shift_1
+	ret
+
+	; Xpos 
+shift_1:
+	ldi temp, 'C'
+	sts 0x000127, temp
+	ret
+clear_display: ; ################################################## this should only occur when button has been pressed?
+	; display something random
+;rcall lcd_wait_busy
+;ldi data, 0x01
+;rcall lcd_write_com
+ldi temp, 'h'; represents nothing
+sts 0x000132,temp
+
+ldi temp, 'e' 
+sts 0x000133,r16
+
+ldi temp, 'l' 
+sts 0x000134,r16
+
+ldi temp, 'l' 
+sts 0x000135,r16
+
+ldi temp, 'o' 
+sts 0x000104,r16
+
+ldi temp, 't' 
+sts 0x000105,r16
+
+ldi temp, 'a' 
+sts 0x000106,r16
+
+ldi temp, 'b' 
+sts 0x000107,r16
+	cli ; disbale global interrupt
+	;rcall lcd_wait_busy
+	;ldi data, 0x01 // 00000001 clear
+	;rcall lcd_write_com
+	ret
 
 ;############################# sends data to LCD #####################################
 
@@ -625,52 +721,61 @@ ldi temp, 0
 cpi temp, 0
 breq write_game_data
 
+; ### make this read
 write_game_data: ; should always write to first line
 rcall lcd_wait_busy
 ldi data, 0x01
 rcall lcd_write_com
-ldi data, 'L' // lives remaining
+
+lds data, 0x000132 ; the contents of this is changing every second
+;ldi data, 'M'
+;ldi data, 'L' // lives remaining
 rcall lcd_wait_busy
 rcall lcd_write_data
 
-ldi data, ':'
+lds data, 0x000133
+;ldi data, ':'
 rcall lcd_wait_busy
 rcall lcd_write_data
 
-ldi data, '1' // arbitary number, need to change this
+lds data, 0x000134
+;ldi data, '1' // arbitary number, need to change this
 rcall lcd_wait_busy
 rcall lcd_write_data
 
-ldi data, ' ' // space
+lds data, 0x000135
+;ldi data, ' ' // space
 rcall lcd_wait_busy
 rcall lcd_write_data
 
-ldi data, 'C' // cars remaining
+lds data, 0x000104
+;ldi data, 'C' // cars remaining
 rcall lcd_wait_busy
 rcall lcd_write_data
 
-ldi data, ':'
+lds data, 0x000105
+;ldi data, ':'
 rcall lcd_wait_busy
 rcall lcd_write_data
 
-ldi temp, '3'
-mov data, temp
+lds data, 0x000106
+;ldi data, ':'
+rcall lcd_wait_busy
+rcall lcd_write_data
+lds data, 0x000107
+;ldi data, ':'
+rcall lcd_wait_busy
+rcall lcd_write_data
+;ldi temp, '3'
+;mov data, temp
 //ldi data, temp // arbitary number, need to change this
-rcall lcd_wait_busy
-rcall lcd_write_data
+;rcall lcd_wait_busy
+;rcall lcd_write_data
 
-ldi data, '|' // divider
-rcall lcd_wait_busy
-rcall lcd_write_data
+;ldi data, '|' // divider
+;rcall lcd_wait_busy
+;rcall lcd_write_data
 rcall write_gameplay_top
-;cpi yPos, 0 ; if 0 then car goes on this line
-;breq write_obstacle_top
-;cpi yPos, 0
-;brlt topLimit
-; write obstacle here, go here car will be in bottom row
-;mov temp, xPos
-;subi temp, 6
-;jmp write_space_obstacle
 jmp write_game_data_bot_row
 
 ;####### write top line of game play (right corner) ##############
@@ -807,7 +912,6 @@ jmp write_game_data_bot_row
 
 ; if dist = 1 we crash TESTCASE: turn the light on
 car_crash:
-;clr temp
 
 ret 
 
@@ -940,8 +1044,6 @@ inc temp3
 
 
 underten:
-;mov data, temp3
-;rcall write_digit
 mov data, temp3 ; tens col
 rcall write_digit
 mov data, temp
