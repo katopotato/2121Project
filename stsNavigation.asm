@@ -1,10 +1,4 @@
-/** connections:
- * PB0-PB3     -> LED0 - LED3
- * PB4         -> Mot    
- * Ain(Audio)  -> OpD
- * ASD         -> Speaker (PIN 1)
- * PB0(Switch) -> OpE   
- */
+; Refer to User Guide for pin configuration.
 .include "m64def.inc"
 
 .def temp=r16
@@ -603,7 +597,6 @@ rcall lcd_update
 ret ; return to caller
 ;ret
 down:
-
 	ldi temp, ' '
 	sts 0x000116, temp
 	ldi temp, 'C'
@@ -611,14 +604,6 @@ down:
 	ret
 ; shifts across to the right
 right: 
-	; find c
-	;ldi temp, 'P'
-	;sts 0x000127, temp
-	;ldi temp, 'X'
-	;sts 0x000128, temp
-	;lds r24, 0x000126
-	;cpi r24, 'C'
-	;breq shift_1
 	ldi temp, ' '
 	sts 0x000116, temp
 	ldi temp, 'C'
