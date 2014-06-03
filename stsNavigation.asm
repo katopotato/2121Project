@@ -301,7 +301,7 @@ outmot:
         ldi temp3,0
         ldi counter3,0
 		;dec xPos
-		rcall keyboard_read ; number will be stored in temp
+;		rcall keyboard_read ; number will be stored in temp
 		rcall lcd_update
 ;RCALL WRITE SCORE TOP
 ;WRITE GAME TOP
@@ -356,8 +356,12 @@ second_half_top:
 		
 		
 ; ## shift second row##
-		lds r24, 0x000125
-		sts 0x000124, r24 ; move the data across one
+	lds r24, 0x000124 ; ######## check that it isn't car
+	;cpi r24, 'C' ; only move across if not equal
+	;brne move_across2
+	
+		;lds r24, 0x000125
+		;sts 0x000124, r24 ; move the data across one
 
 		lds r24, 0x000126
 		sts 0x000125, r24
@@ -369,6 +373,7 @@ second_half_top:
 		cpi r24, 'S'	; remove power up
 		breq remove_power_up_bot
 		jmp second_half_bot
+
 
 second_half_bot:	
 		sts 0x000127, r24
@@ -395,7 +400,14 @@ remove_power_up_bot:
 remove_power_up_top: ;#### removes the power up
 	ldi r24, ' '
 	rjmp second_half_top                
-                   ; Return from the interrupt.
+          
+		  /*         ; Return from the interrupt.
+move_across2:
+	; letter is not a c:	
+		lds r24, 0x000125
+		sts 0x000124, r24 ; move the data across one
+		ret*/
+
 check_bottom: ; check that the bottom row has no obstacle
 	cpi r26, ' '
 	breq place_object
@@ -453,7 +465,7 @@ ldi temp, 1<<TOIE0       ; =278 microseconds
 out TIMSK, temp          ; T/C0 interrupt enable
 sei                      ; Enable global interrupt
 ;### Read the keyboard ###
-;rcall keyboard_read ; number will be stored in temp
+rcall keyboard_read ; number will be stored in temp
 ;cpi r27, 0
 ;breq clear_display ;#### clear the display as a test
 ;initially obstacle is on the far right
@@ -573,82 +585,50 @@ zero:
 clr temp ; set to zero
 
 convert_end:
-;clr r27
+clr r27
 ; write the value to lives:
 
 mov r27, temp
 sts 0x000134, r27
 cpi r27, 6 ; move right
 breq right
-/* #############################################  TO DO , IMPLEMENT THIS
 
-cpi r27, 4 ; move left
-breq left
-cpi r27, 2 ; move up
-breq up
-cpi r27, 4 ; move down
+cpi r27, 8 ; move down
 breq down
-cpi r27, star
-breq skip_level
-cpi r27, hash
-breq restart_game
-else do not move c, car only moves with key press
+/* #############################################  TO DO , IMPLEMENT THIS
 */
 SET
 BLD temp, 0
-
+rcall lcd_update
 ret ; return to caller
 ;ret
+down:
 
+	ldi temp, ' '
+	sts 0x000116, temp
+	ldi temp, 'C'
+	sts 0x000124, temp
+	ret
 ; shifts across to the right
 right: 
 	; find c
-	ldi temp, 'P'
-	sts 0x000127, temp
-	ldi temp, 'X'
-	sts 0x000128, temp
+	;ldi temp, 'P'
+	;sts 0x000127, temp
+	;ldi temp, 'X'
+	;sts 0x000128, temp
 	;lds r24, 0x000126
 	;cpi r24, 'C'
 	;breq shift_1
+	ldi temp, ' '
+	sts 0x000116, temp
+	ldi temp, 'C'
+	sts 0x000117, temp
 	ret
 
 	; Xpos 
 shift_1:
 	ldi temp, 'C'
-	sts 0x000127, temp
-	ret
-clear_display: ; ################################################## this should only occur when button has been pressed?
-	; display something random
-;rcall lcd_wait_busy
-;ldi data, 0x01
-;rcall lcd_write_com
-ldi temp, 'h'; represents nothing
-sts 0x000132,temp
-
-ldi temp, 'e' 
-sts 0x000133,r16
-
-ldi temp, 'l' 
-sts 0x000134,r16
-
-ldi temp, 'l' 
-sts 0x000135,r16
-
-ldi temp, 'o' 
-sts 0x000104,r16
-
-ldi temp, 't' 
-sts 0x000105,r16
-
-ldi temp, 'a' 
-sts 0x000106,r16
-
-ldi temp, 'b' 
-sts 0x000107,r16
-	cli ; disbale global interrupt
-	;rcall lcd_wait_busy
-	;ldi data, 0x01 // 00000001 clear
-	;rcall lcd_write_com
+	sts 0x000131, temp
 	ret
 
 ;############################# sends data to LCD #####################################
